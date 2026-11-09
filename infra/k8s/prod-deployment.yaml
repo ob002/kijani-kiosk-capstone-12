@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kijani-production
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kijani-kiosk
+  namespace: kijani-production
+  labels:
+    app: kijani-kiosk
+    env: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: kijani-kiosk
+  template:
+    metadata:
+      labels:
+        app: kijani-kiosk
+        env: production
+    spec:
+      containers:
+      - name: kiosk-api
+        image: your-dockerhub-username/kijani-kiosk:latest
+        ports:
+        - containerPort: 5000
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 10
