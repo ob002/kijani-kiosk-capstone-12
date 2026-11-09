@@ -8,6 +8,8 @@ Welcome to the KijaniKiosk Capstone Project. This repository contains the produc
 
 ## 🗺️ Architecture
 
+![Architecture Diagram](docs/architecture.png)
+
 **High-Level Flow:**  
 `GitHub Push` → `GitHub Actions (Build/Test)` → `Deploy to Staging` → `Smoke Test` → `Manual Approval Gate` → `Deploy to Production` → `Prometheus/Grafana Monitoring`
 
