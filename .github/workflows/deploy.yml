@@ -1,0 +1,40 @@
+name: KijaniKiosk CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Build Docker Image
+        run: docker build -t kijani-kiosk:${{ github.sha }} ./app
+      - name: Run Basic Tests
+        run: echo "Running unit tests... (Placeholder for pytest)"
+
+  deploy-staging:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Staging
+        run: |
+          echo "Deploying to kijani-staging namespace..."
+          # kubectl apply -f infra/k8s/staging-deployment.yaml
+          echo "Staging deployment complete."
+
+  deploy-production:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://kijani-kiosk.prod.example.com
+    steps:
+      - name: Deploy to Production
+        run: |
+          echo "Deploying to kijani-production namespace..."
+          # kubectl apply -f infra/k8s/prod-deployment.yaml
+          echo "Production deployment complete."
