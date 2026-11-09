@@ -74,6 +74,16 @@ curl http://localhost:5000/health
 curl http://localhost:5000/checkout
 ```
 
+## Local Testing
+
+```bash
+# Make smoke test executable before running or committing
+chmod +x scripts/smoke-test.sh
+
+# Run against local app
+./scripts/smoke-test.sh http://localhost:5000
+```
+
 ## Environments
 
 | Environment | Namespace | Trigger | Gate |

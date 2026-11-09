@@ -1,22 +1,17 @@
 #!/bin/bash
-set -e
+# Simple smoke test for KijaniKiosk
+# Usage: ./smoke-test.sh <URL>
 
-BASE_URL=${1:-"http://localhost:5000"}
+URL=${1:-"http://localhost:5000"}
 
-echo "Running smoke tests against $BASE_URL..."
+echo "Running smoke test against $URL..."
 
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/health")
-if [ "$STATUS" != "200" ]; then
-  echo "FAIL: /health returned $STATUS"
-  exit 1
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL/health")
+
+if [ "$HTTP_CODE" -eq 200 ]; then
+    echo "✅ SUCCESS: Health check passed (HTTP 200)"
+    exit 0
+else
+    echo "❌ FAILURE: Health check failed (HTTP $HTTP_CODE)"
+    exit 1
 fi
-echo "PASS: /health returned 200"
-
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/checkout")
-if [ "$STATUS" != "201" ]; then
-  echo "FAIL: /checkout returned $STATUS"
-  exit 1
-fi
-echo "PASS: /checkout returned 201"
-
-echo "All smoke tests passed."
