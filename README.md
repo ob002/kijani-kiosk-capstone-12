@@ -14,9 +14,9 @@
 
 | Layer | Component |
 |-------|-----------|
-| Infrastructure | Terraform provisions namespaces · Ansible configures staging |
-| Delivery | GitHub Actions: build → test → staging deploy → smoke test → approval gate → prod deploy |
-| Runtime | Kubernetes: `kijani-staging` (2 replicas) · `kijani-production` (3 replicas + resource limits) |
+| Infrastructure | Terraform provisions namespaces · Ansible playbook written, not yet executed |
+| Delivery | Jenkins: build → staging deploy → smoke test → approval gate → prod deploy |
+| Runtime | Kubernetes: `kijani-staging` and `kijani-production`, both 2 replicas with the same CPU/memory requests and limits (one shared manifest) |
 | Intelligence | Prometheus + Grafana (planned) — alert rules written in `infra/prometheus-alerts.yaml`, not yet deployed |
 
 ---
@@ -25,9 +25,9 @@
 
 - **App:** Python 3.12 (Flask)
 - **Container:** Docker (with `.dockerignore`)
-- **IaC:** Terraform + Ansible
+- **IaC:** Terraform (applied: creates both namespaces) · Ansible (playbook written, not yet executed)
 - **Orchestration:** Kubernetes — namespace isolated (`kijani-staging` / `kijani-production`)
-- **CI/CD:** Jenkins (Multibranch Pipeline — `Jenkinsfile` at repo root, manual approval gate with reason capture)
+- **CI/CD:** Jenkins (Pipeline job, "Pipeline script from SCM", polls `main` every 2 min — `Jenkinsfile` at repo root, manual approval gate that records a reason)
 - **Observability:** Prometheus + Grafana (planned) — alert rules committed to `infra/prometheus-alerts.yaml`; deployment of `kube-prometheus-stack` and ServiceMonitor is a Production Gap
 
 ---
@@ -65,23 +65,27 @@ chmod +x scripts/smoke-test.sh
 
 ## 4. 🏗️ Deployment Pipeline
 
-The pipeline is defined in `Jenkinsfile` at the repo root. Jenkins picks it up automatically via a Multibranch Pipeline job.
+The pipeline is defined in `Jenkinsfile` at the repo root. A Jenkins Pipeline job ("Pipeline script from SCM") polls `main` every 2 minutes and runs it on change.
 
-1. Push to `main` → Jenkins triggers **Checkout → Build → Test → Deploy Staging → Smoke Test**
-2. Smoke test must pass before the pipeline proceeds
-3. **Approval Gate** pauses the pipeline and prompts for a reviewer name and a mandatory reason before production deploy
-4. Kubernetes manifests in `infra/k8s/` are environment-specific — production enforces 3 replicas and resource limits via separate ConfigMaps
+1. Push to `main` → Jenkins runs **Checkout → Build → Deploy to Staging → Smoke Test**
+2. Smoke test must pass (HTTP 200 from `/health`) before the pipeline proceeds
+3. **Approval Gate** pauses the pipeline; Jenkins records who approved and the reason they entered (the reason field is not yet enforced as non-empty)
+4. Both namespaces use the same `infra/k8s/deployment.yaml` (2 replicas, same resource limits); only the ConfigMap differs per environment
+5. If any stage fails, `post { failure }` runs `kubectl rollout undo` on staging
 
 ### Pipeline Stages
 ```
-Checkout → Build Docker Image → Run Tests → Deploy to Staging → Smoke Test → Approval Gate → Deploy to Production
+Checkout → Build Docker Image → Deploy to Staging → Smoke Test → Approve Production → Deploy to Production
 ```
+There is no unit-test stage yet (see Production Gaps).
 
 ### Fault Scenario (Demo)
+Run **Build with Parameters** with `INJECT_FAULT` ticked. The pipeline sets `FAULT_HEALTH=true` on staging, `/health` returns 500, the smoke test fails, both production stages are skipped and staging is rolled back. Evidence: [docs/evidence/](docs/evidence/README.md).
+
+Self-healing check (separate from the pipeline):
 ```bash
-# Kill a staging pod — Kubernetes restarts it automatically via liveness probe
-kubectl delete pod -l app=kijani-kiosk -n kijani-staging
-# Watch recovery
+# Delete a staging pod — the ReplicaSet recreates it to keep 2 replicas
+kubectl delete pod -l app=kk-payments -n kijani-staging --wait=false
 kubectl get pods -n kijani-staging -w
 ```
 
@@ -100,17 +104,17 @@ kubectl get pods -n kijani-staging -w
 │   └── architecture.png        # Generated from Mermaid
 ├── infra/
 │   ├── ansible/
-│   │   └── configure-staging.yml   # Ansible: configure staging post-Terraform
+│   │   └── configure-staging.yml   # Ansible playbook (written, not yet executed)
 │   ├── k8s/
+│   │   ├── deployment.yaml         # Shared by both namespaces: 2 replicas + resource limits
+│   │   ├── service.yaml
 │   │   ├── staging-configmap.yaml  # DB_HOST=kk-payments-staging-db
-│   │   ├── staging-deployment.yaml
-│   │   ├── prod-configmap.yaml     # DB_HOST=kk-payments-prod-db
-│   │   └── prod-deployment.yaml    # 3 replicas + resource limits
-│   └── prometheus-alerts.yaml      # Alert rules on kk-payments signals
-├── pipeline/
-│   └── deploy.yml              # GitHub Actions workflow (copy — canonical: .github/workflows/)
-└── scripts/
-    └── smoke-test.sh
+│   │   └── prod-configmap.yaml     # DB_HOST=kk-payments-prod-db
+│   ├── terraform/                  # Creates kijani-staging and kijani-production namespaces
+│   └── prometheus-alerts.yaml      # Alert rules (not deployed)
+├── scripts/
+│   └── smoke-test.sh
+└── Jenkinsfile                     # The pipeline
 ```
 
 ---
@@ -119,7 +123,7 @@ kubectl get pods -n kijani-staging -w
 
 | Decision | Chosen | Alternative | Reason |
 |----------|--------|-------------|--------|
-| CI/CD tool | Jenkins | GitHub Actions | Track A explicitly requires Jenkins; approval gate implemented via `input()` step with mandatory reason capture |
+| CI/CD tool | Jenkins | GitHub Actions | Track A explicitly requires Jenkins; approval gate implemented via `input()` step that records the approver and a reason |
 | Local K8s | Minikube/Kind | EKS/GKE | Zero cost for capstone; same manifest format works on cloud with no changes |
 | Config management | Ansible | Helm | Ansible is already in the course stack; Helm adds templating complexity not needed at this scale |
 
@@ -131,7 +135,10 @@ kubectl get pods -n kijani-staging -w
 |-----|--------------|
 | **Prometheus not deployed** | `/metrics` endpoint and `infra/prometheus-alerts.yaml` exist. Fix: install `kube-prometheus-stack` via Helm, add a `ServiceMonitor` for `kk-payments`, verify alert fires when error rate > 5% |
 | **Receipt chain not integrated** | `kk-payments` has no S3 write. Fix: add `boto3` call in `/checkout` to write to `kk-payments-receipts-staging` bucket, add bucket notification to trigger the serverless receipt chain |
-| **Unit tests are a placeholder** | `Run Tests` stage echoes text. Fix: write `pytest` tests for `/health` and `/checkout`, replace `echo` with `python -m pytest tests/ -v` |
+| **No unit tests** | The pipeline has no test stage; the only automated check is the staging smoke test. Fix: write `pytest` tests for `/health` and `/checkout` and add a `Test` stage running `python -m pytest tests/ -v` before Deploy to Staging |
+| **Ansible not executed** | `infra/ansible/configure-staging.yml` is written but has never been run against the cluster. Fix: run it after `terraform apply`, or remove it if the ConfigMaps already cover staging config |
+| **Prod identical to staging** | Both namespaces use the same manifest (2 replicas, same limits). Fix: Kustomize overlay or a `prod-deployment.yaml` with 3 replicas and stricter limits |
+| **Approval reason not enforced** | An empty reason is accepted. Fix: `if (!env.APPROVAL_REASON?.trim()) { error('Approval reason required') }` |
 | **TLS/HTTPS** | App runs plain HTTP. Fix: add `cert-manager` + Let's Encrypt `Issuer` to `infra/k8s/` |
 | **Horizontal Pod Autoscaler** | No HPA. Fix: add HPA manifest targeting CPU > 70% |
 
