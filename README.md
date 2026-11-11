@@ -1,4 +1,4 @@
-# 🌿 KijaniKiosk Infrastructure Pipeline
+# KijaniKiosk Infrastructure Pipeline
 
 [![CI/CD Pipeline](https://github.com/ob002/kijani-kiosk-capstone/actions/workflows/deploy.yml/badge.svg)](https://github.com/ob002/kijani-kiosk-capstone/actions/workflows/deploy.yml)
 
@@ -6,21 +6,21 @@ Welcome to the KijaniKiosk Capstone Project. This repository contains the produc
 
 > **Core Objective:** A new engineer should be able to clone this repository, understand the architecture, and deploy a meaningful change to the staging environment within their first day.
 
-## 🗺️ Architecture
+## Architecture
 
 ![Architecture Diagram](docs/architecture.png)
 
 **High-Level Flow:**  
 `GitHub Push` → `GitHub Actions (Build/Test)` → `Deploy to Staging` → `Smoke Test` → `Manual Approval Gate` → `Deploy to Production` → `Prometheus/Grafana Monitoring`
 
-## 🛠️ Technology Stack
+## Technology Stack
 - **App:** Python 3.12 (Flask)
 - **Container:** Docker
 - **Orchestration:** Kubernetes (Namespace isolated: `kijani-staging` & `kijani-production`)
 - **CI/CD:** GitHub Actions (with Environment Protection Rules)
 - **Observability:** Prometheus + Grafana
 
-## 🚀 Getting Started (Local Development)
+## Getting Started (Local Development)
 
 ### Prerequisites
 - Python 3.12+
@@ -49,13 +49,13 @@ chmod +x scripts/smoke-test.sh
 ./scripts/smoke-test.sh http://localhost:5000
 ```
 
-## 🏗️ Deployment Pipeline
+## Deployment Pipeline
 This project uses GitHub Actions (`pipeline/deploy.yml`).
 1. Pushing to `main` triggers the `build-and-test` and `deploy-staging` jobs automatically.
 2. The `deploy-production` job is protected by a **Manual Approval Gate** (configured in GitHub Settings → Environments → `production`).
 3. Kubernetes manifests are separated by environment in `infra/k8s/`, with production enforcing stricter resource limits and higher replica counts.
 
-## 📂 Repository Structure
+## Repository Structure
 ```text
 ├── app/                  # Python Flask application & Dockerfile
 ├── docs/                 # Scope, Architecture, Peer Feedback, Reflection
@@ -65,7 +65,7 @@ This project uses GitHub Actions (`pipeline/deploy.yml`).
 └── README.md             # You are here!
 ```
 
-## 🤝 Peer Feedback & Governance
+## Peer Feedback & Governance
 - See [docs/peer-feedback-log.md](docs/peer-feedback-log.md) for resolved improvements.
 - See [docs/scope-document.md](docs/scope-document.md) for AI governance and integrity statements.
 
