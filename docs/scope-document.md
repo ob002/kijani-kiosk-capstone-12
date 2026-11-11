@@ -34,6 +34,8 @@ Deliver a fully automated, secure, and observable infrastructure pipeline such t
 | Staging | `kijani-staging` | Push to `main` | Automatic after smoke test | `DB_HOST=kk-payments-staging-db` |
 | Production | `kijani-production` | Tagged release `v*` | Manual approval required | `DB_HOST=kk-payments-prod-db` |
 
+**Namespace decision — `kijani-production` not `default`:** The brief permits using `default` for production. This project uses an explicit `kijani-production` namespace instead. Reason: on a shared cluster, deploying into `default` risks resource name collisions with other workloads. Explicit namespaces make RBAC, resource quotas, and network policies easier to scope correctly. The Jenkinsfile `PROD` variable can be changed to `default` in one line if the grader requires it.
+
 ## 6. In-Scope Items (5 maximum)
 1. Automated CI/CD pipeline with build, test, staging deploy, and production approval gate
 2. Kubernetes namespace isolation with environment-specific ConfigMaps
