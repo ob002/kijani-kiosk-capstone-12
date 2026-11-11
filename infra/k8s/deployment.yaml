@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kk-payments
+  labels:
+    app: kk-payments
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: kk-payments
+  template:
+    metadata:
+      labels:
+        app: kk-payments
+    spec:
+      containers:
+      - name: kiosk-api
+        image: IMAGE_PLACEHOLDER
+        ports:
+        - containerPort: 5000
+        envFrom:
+        - configMapRef:
+            name: kk-payments-config
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
