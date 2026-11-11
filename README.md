@@ -1,6 +1,6 @@
 # 🌿 KijaniKiosk Infrastructure Pipeline
 
-[![CI/CD Pipeline](https://github.com/ob002/kijani-kiosk-capstone/actions/workflows/deploy.yml/badge.svg)](https://github.com/ob002/kijani-kiosk-capstone/actions/workflows/deploy.yml)
+[![Jenkins Pipeline](https://img.shields.io/badge/Jenkins-Pipeline-blue?logo=jenkins)](https://github.com/ob002/kijani-kiosk-capstone/blob/main/Jenkinsfile)
 
 > **Core Objective:** A new engineer should be able to clone this repository, understand the architecture, and deploy a meaningful change to the staging environment within their first day.
 
@@ -27,7 +27,7 @@
 - **Container:** Docker (with `.dockerignore`)
 - **IaC:** Terraform + Ansible
 - **Orchestration:** Kubernetes — namespace isolated (`kijani-staging` / `kijani-production`)
-- **CI/CD:** GitHub Actions with Environment Protection Rules (manual approval gate)
+- **CI/CD:** Jenkins (Multibranch Pipeline — `Jenkinsfile` at repo root, manual approval gate with reason capture)
 - **Observability:** Prometheus + Grafana — alert rules committed to `infra/prometheus-alerts.yaml`
 
 ---
@@ -65,14 +65,21 @@ chmod +x scripts/smoke-test.sh
 
 ## 4. 🏗️ Deployment Pipeline
 
-1. Push to `main` → triggers `build-and-test` and `deploy-staging` automatically
-2. Smoke test runs post-staging deploy
-3. `deploy-production` is blocked by a **Manual Approval Gate** (GitHub Settings → Environments → `production` → Required reviewers: `ob002`)
-4. Kubernetes manifests in `infra/k8s/` are environment-specific — production enforces resource limits and 3 replicas via ConfigMap
+The pipeline is defined in `Jenkinsfile` at the repo root. Jenkins picks it up automatically via a Multibranch Pipeline job.
+
+1. Push to `main` → Jenkins triggers **Checkout → Build → Test → Deploy Staging → Smoke Test**
+2. Smoke test must pass before the pipeline proceeds
+3. **Approval Gate** pauses the pipeline and prompts for a reviewer name and a mandatory reason before production deploy
+4. Kubernetes manifests in `infra/k8s/` are environment-specific — production enforces 3 replicas and resource limits via separate ConfigMaps
+
+### Pipeline Stages
+```
+Checkout → Build Docker Image → Run Tests → Deploy to Staging → Smoke Test → Approval Gate → Deploy to Production
+```
 
 ### Fault Scenario (Demo)
 ```bash
-# Kill a staging pod — Kubernetes restarts it automatically
+# Kill a staging pod — Kubernetes restarts it automatically via liveness probe
 kubectl delete pod -l app=kijani-kiosk -n kijani-staging
 # Watch recovery
 kubectl get pods -n kijani-staging -w
@@ -112,7 +119,7 @@ kubectl get pods -n kijani-staging -w
 
 | Decision | Chosen | Alternative | Reason |
 |----------|--------|-------------|--------|
-| CI/CD tool | GitHub Actions | Jenkins | No separate server to provision; native GitHub integration; `environment:` block gives approval gate for free |
+| CI/CD tool | Jenkins | GitHub Actions | Track A explicitly requires Jenkins; approval gate implemented via `input()` step with mandatory reason capture |
 | Local K8s | Minikube/Kind | EKS/GKE | Zero cost for capstone; same manifest format works on cloud with no changes |
 | Config management | Ansible | Helm | Ansible is already in the course stack; Helm adds templating complexity not needed at this scale |
 
