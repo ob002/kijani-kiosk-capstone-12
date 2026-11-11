@@ -25,7 +25,7 @@ pipeline {
             steps {
                 sh '''
                     docker build -t $IMAGE ./app
-                    minikube image load $IMAGE
+                    docker save $IMAGE | docker exec -i minikube ctr -n k8s.io images import -
                 '''
             }
         }
