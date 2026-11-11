@@ -61,3 +61,18 @@
 | **What It Got Wrong** | Minikube's container runtime is containerd (confirmed via `minikube start` output: `containerd 2.3.4`), not Docker. The `docker load` command targets the Docker daemon inside the Minikube VM, which does not exist. Running it produced "unrecognized image format" because containerd does not understand the Docker load protocol. |
 | **Human Action Taken** | Identified the correct containerd import command: `docker save $IMAGE \| docker exec -i minikube ctr -n k8s.io images import -`. Tested manually: `docker save kijani-kiosk:test \| docker exec -i minikube ctr -n k8s.io images import -` confirmed `docker.io/library/kijani-kiosk:test` visible in `minikube ctr -n k8s.io images ls`. Updated the Jenkinsfile Build stage accordingly. Committed in PR #6, `b9e80b8`. |
 | **Governance Checklist** | ✅ Reviewed line-by-line · ✅ Tested with real image · ✅ Adapted for context · ✅ Disclosed here |
+
+---
+
+## Entry 5
+
+| Field | Detail |
+|-------|--------|
+| **Date** | 2026-11-12 |
+| **Tool Used** | LLM (Amazon Q) |
+| **Task** | Add a receipt chain verification stage to the Jenkinsfile |
+| **Prompt Given** | "Add a stage after Deploy to Production that verifies the receipt chain fired by POSTing to /checkout and checking for a 201 response" |
+| **What It Produced** | A `Verify Receipt Chain` stage that port-forwarded to staging on port 5001, POSTed to `/checkout`, and checked for HTTP 201 |
+| **What It Got Wrong** | Three problems: (1) The stage ran after Deploy to Production — if it failed, `post { failure }` would roll back the staging deployment while the broken build stayed live in production, leaving production in a worse state than before. (2) The stage used a different port (5001) from the smoke test (5000) with no explanation, which would fail if port 5001 was already in use. (3) The stage only checked that `/checkout` returned 201 — it never verified that a message was actually written to `kk-payments-receipts-staging`. A 201 from the app proves nothing about the receipt chain. The receipt chain integration itself was never built (no S3 write in `app.py`), so the stage was testing something that did not exist. |
+| **Human Action Taken** | Removed the `Verify Receipt Chain` stage entirely. Documented the receipt chain as a Production Gap in `README.md` with a specific fix: add `boto3` S3 write in `/checkout`, add bucket notification to trigger the serverless chain. Committed in PR #9. |
+| **Governance Checklist** | ✅ Reviewed line-by-line · ✅ Failure mode identified before running · ✅ Removed rather than left as misleading · ✅ Disclosed here |
