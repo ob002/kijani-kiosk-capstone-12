@@ -15,7 +15,7 @@ pipeline {
         IMAGE   = "kijani-kiosk:${env.GIT_COMMIT.take(7)}"
         STAGING = "kijani-staging"
         // kijani-production chosen over 'default' to avoid resource collisions
-        // on shared clusters. Change PROD to 'default' if the grader requires it.
+        // on shared clusters. See docs/scope-document.md for the namespace decision rationale.
         PROD    = "kijani-production"
     }
 

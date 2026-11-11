@@ -17,7 +17,7 @@
 | Infrastructure | Terraform provisions namespaces · Ansible configures staging |
 | Delivery | GitHub Actions: build → test → staging deploy → smoke test → approval gate → prod deploy |
 | Runtime | Kubernetes: `kijani-staging` (2 replicas) · `kijani-production` (3 replicas + resource limits) |
-| Intelligence | Prometheus scrapes pod metrics · Grafana alerts on error rate > 5% or CrashLoopBackOff |
+| Intelligence | Prometheus + Grafana (planned) — alert rules written in `infra/prometheus-alerts.yaml`, not yet deployed |
 
 ---
 
@@ -28,7 +28,7 @@
 - **IaC:** Terraform + Ansible
 - **Orchestration:** Kubernetes — namespace isolated (`kijani-staging` / `kijani-production`)
 - **CI/CD:** Jenkins (Multibranch Pipeline — `Jenkinsfile` at repo root, manual approval gate with reason capture)
-- **Observability:** Prometheus + Grafana — alert rules committed to `infra/prometheus-alerts.yaml`
+- **Observability:** Prometheus + Grafana (planned) — alert rules committed to `infra/prometheus-alerts.yaml`; deployment of `kube-prometheus-stack` and ServiceMonitor is a Production Gap
 
 ---
 
@@ -127,13 +127,13 @@ kubectl get pods -n kijani-staging -w
 
 ## 7. 🚧 Production Gaps (What's Not Done Yet)
 
-| Gap | What's Needed to Fix It |
-|-----|------------------------|
-| TLS/HTTPS | Add cert-manager + Let's Encrypt Issuer to `infra/k8s/` |
-| Real DB | Replace mock in-memory store with a provisioned PostgreSQL StatefulSet |
-| Horizontal Pod Autoscaler | Add HPA manifest targeting CPU > 70% |
-| Secrets management | Replace ConfigMap DB_HOST with Kubernetes Secrets or AWS Secrets Manager |
-| Multi-day commit history | Feature branches and PRs from day one (see reflection) |
+| Gap | Specific Fix |
+|-----|--------------|
+| **Prometheus not deployed** | `/metrics` endpoint and `infra/prometheus-alerts.yaml` exist. Fix: install `kube-prometheus-stack` via Helm, add a `ServiceMonitor` for `kk-payments`, verify alert fires when error rate > 5% |
+| **Receipt chain not integrated** | `kk-payments` has no S3 write. Fix: add `boto3` call in `/checkout` to write to `kk-payments-receipts-staging` bucket, add bucket notification to trigger the serverless receipt chain |
+| **Unit tests are a placeholder** | `Run Tests` stage echoes text. Fix: write `pytest` tests for `/health` and `/checkout`, replace `echo` with `python -m pytest tests/ -v` |
+| **TLS/HTTPS** | App runs plain HTTP. Fix: add `cert-manager` + Let's Encrypt `Issuer` to `infra/k8s/` |
+| **Horizontal Pod Autoscaler** | No HPA. Fix: add HPA manifest targeting CPU > 70% |
 
 ---
 
