@@ -3,29 +3,54 @@
 ## 1. Project Overview
 **Project Name:** KijaniKiosk Infrastructure Pipeline  
 **Chosen Track:** Track A (Infrastructure-First)  
-**Business Context:** KijaniKiosk is a mock eco-friendly ticketing and point-of-sale API. This capstone focuses exclusively on building the production-grade DevOps infrastructure, CI/CD pipelines, and observability required to support it.
+**Business Context:** KijaniKiosk is a mock eco-friendly ticketing and point-of-sale API. This capstone builds the production-grade DevOps infrastructure, CI/CD pipeline, and observability stack required to support it reliably.
 
 ## 2. Core Objective
-To deliver a fully automated, secure, and observable infrastructure pipeline such that a new engineer can clone the repository, understand the architecture, and deploy a meaningful change to the staging environment within their first day.
+Deliver a fully automated, secure, and observable infrastructure pipeline such that a new engineer can clone the repository, understand the architecture, and deploy a meaningful change to the staging environment within their first day.
 
 ## 3. Technology Stack
-- **Application:** Python 3.12 (Flask)
-- **Containerization:** Docker
-- **Infrastructure as Code (IaC):** Terraform
-- **Orchestration:** Kubernetes (Minikube/Kind for local, EKS/GKE ready) with namespace isolation (`kijani-staging` and `kijani-production`)
-- **CI/CD:** GitHub Actions (with manual approval gates for production)
-- **Observability:** Prometheus + Grafana, with at least one active alert rule
 
-## 4. Environment Strategy
-- **Staging (`kijani-staging`):** Auto-deployed on every push/merge to `main`. Runs automated smoke tests post-deployment.
-- **Production (`kijani-production`):** Requires a manual approval gate. Only tagged releases (`v*`) are deployed here.
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| **Infrastructure** | Terraform | Provision namespaces and cluster resources |
+| **Configuration** | Ansible | Configure the staging environment post-provision |
+| **Application** | Python 3.12 (Flask) | Stateless kiosk API |
+| **Containerisation** | Docker | Reproducible, portable builds |
+| **Orchestration** | Kubernetes | Namespace-isolated staging and production runtimes |
+| **CI/CD** | GitHub Actions | Automated build, test, deploy, and approval gate |
+| **Observability** | Prometheus + Grafana | Metrics scraping and alerting on kk-payments signals |
 
-## 5. AI Governance & Integrity
-AI tools were used to generate boilerplate Kubernetes manifests and Terraform scaffolding. All AI-generated code has been manually reviewed, tested, and documented to ensure security and compliance with academic integrity policies.
+## 4. Four-Layer Architecture Map (Dimension 2)
 
-## 6. Success Criteria (Definition of Done)
-- [ ] Repository is cleanly structured with a comprehensive README
-- [ ] CI/CD pipeline successfully builds, tests, and deploys to staging
-- [ ] Manual approval gate blocks automatic production deployment
-- [ ] Prometheus is scraping metrics and at least one alert is configured
-- [ ] Peer feedback has been logged and at least one actionable improvement has been merged
+- **Infrastructure layer:** Terraform provisions `kijani-staging` and `kijani-production` namespaces. Ansible configures environment-specific settings post-provision.
+- **Delivery layer:** GitHub Actions pipeline — build → test → deploy-staging → smoke test → manual approval gate → deploy-production.
+- **Runtime layer:** Kubernetes Deployments with strict namespace isolation. Production enforces 3 replicas and CPU/memory resource limits. Staging runs 2 replicas with relaxed limits.
+- **Intelligence layer:** Prometheus scrapes pod metrics from both namespaces. Grafana alert fires when the kk-payments error rate exceeds 5% or a pod enters CrashLoopBackOff. Alert config is committed to the repo.
+
+## 5. Environment Strategy
+
+| Environment | Namespace | Trigger | Gate | ConfigMap |
+|-------------|-----------|---------|------|-----------|
+| Staging | `kijani-staging` | Push to `main` | Automatic after smoke test | `DB_HOST=kk-payments-staging-db` |
+| Production | `kijani-production` | Tagged release `v*` | Manual approval required | `DB_HOST=kk-payments-prod-db` |
+
+## 6. In-Scope Items (5 maximum)
+1. Automated CI/CD pipeline with build, test, staging deploy, and production approval gate
+2. Kubernetes namespace isolation with environment-specific ConfigMaps
+3. Prometheus alert on kk-payments error rate or pod restarts
+4. Peer review session with test plan, GitHub Issues, and commit-linked resolutions
+5. AI governance log with at least two entries including "what it got wrong"
+
+## 7. Out-of-Scope Exclusions
+- **TLS/certificate management:** Excluded because the app is stateless and runs behind a cluster ingress not provisioned in this capstone.
+- **Database provisioning:** Excluded because kk-payments uses a mock in-memory store for the capstone scenario; real DB provisioning is a separate infrastructure concern.
+
+## 8. Success Criteria (each demonstrable in the live demo)
+- [ ] Merge to `main` triggers a staging deploy and smoke test — visible in the Actions tab
+- [ ] Approval gate blocks production deploy and shows "Waiting" state — visible in the Actions tab
+- [ ] Killing a staging pod triggers automatic restart — demonstrable with `kubectl delete pod`
+- [ ] Prometheus alert fires when pod restarts exceed threshold — visible in Grafana
+- [ ] New engineer can run the app locally in under 5 minutes following only the README
+
+## 9. AI Governance & Integrity
+All AI tool usage is logged in `docs/ai-governance-log.md` with the prompt given, what the tool produced, what it got wrong, and what human action was taken. Undisclosed AI use is an academic integrity violation per course policy.

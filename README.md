@@ -2,83 +2,149 @@
 
 [![CI/CD Pipeline](https://github.com/ob002/kijani-kiosk-capstone/actions/workflows/deploy.yml/badge.svg)](https://github.com/ob002/kijani-kiosk-capstone/actions/workflows/deploy.yml)
 
-Welcome to the KijaniKiosk Capstone Project. This repository contains the production-grade DevOps infrastructure, CI/CD pipelines, and observability configurations for the KijaniKiosk eco-friendly ticketing API.
-
 > **Core Objective:** A new engineer should be able to clone this repository, understand the architecture, and deploy a meaningful change to the staging environment within their first day.
 
-## 🗺️ Architecture
+---
+
+## 1. 🗺️ Architecture
 
 ![Architecture Diagram](docs/architecture.png)
 
-**High-Level Flow:**  
-`GitHub Push` → `GitHub Actions (Build/Test)` → `Deploy to Staging` → `Smoke Test` → `Manual Approval Gate` → `Deploy to Production` → `Prometheus/Grafana Monitoring`
+**Four-Layer Flow:**
 
-## 🛠️ Technology Stack
+| Layer | Component |
+|-------|-----------|
+| Infrastructure | Terraform provisions namespaces · Ansible configures staging |
+| Delivery | GitHub Actions: build → test → staging deploy → smoke test → approval gate → prod deploy |
+| Runtime | Kubernetes: `kijani-staging` (2 replicas) · `kijani-production` (3 replicas + resource limits) |
+| Intelligence | Prometheus scrapes pod metrics · Grafana alerts on error rate > 5% or CrashLoopBackOff |
+
+---
+
+## 2. 🛠️ Technology Stack
+
 - **App:** Python 3.12 (Flask)
-- **Container:** Docker
-- **Orchestration:** Kubernetes (Namespace isolated: `kijani-staging` & `kijani-production`)
-- **CI/CD:** GitHub Actions (with Environment Protection Rules)
-- **Observability:** Prometheus + Grafana
+- **Container:** Docker (with `.dockerignore`)
+- **IaC:** Terraform + Ansible
+- **Orchestration:** Kubernetes — namespace isolated (`kijani-staging` / `kijani-production`)
+- **CI/CD:** GitHub Actions with Environment Protection Rules (manual approval gate)
+- **Observability:** Prometheus + Grafana — alert rules committed to `infra/prometheus-alerts.yaml`
 
-## 🚀 Getting Started (Local Development)
+---
+
+## 3. 🚀 Getting Started (Local Development)
 
 ### Prerequisites
 - Python 3.12+
 - Docker
-- `kubectl` and a local Kubernetes cluster (Minikube or Kind)
+- `kubectl` + Minikube or Kind
 
-### 1. Run the App Locally
+### Run the app locally
 ```bash
 cd app
 python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate
 pip install -r requirements.txt
 python app.py
 ```
 Visit `http://localhost:5000/health` to verify.
 
-### 2. Build and Test the Docker Image
+### Build and run with Docker
 ```bash
 docker build -t kijani-kiosk:local ./app
 docker run -p 5000:5000 -e ENVIRONMENT=local kijani-kiosk:local
 ```
 
-### 3. Run Smoke Tests
+### Run smoke tests
 ```bash
 chmod +x scripts/smoke-test.sh
 ./scripts/smoke-test.sh http://localhost:5000
 ```
 
-## 🏗️ Deployment Pipeline
-This project uses GitHub Actions (`pipeline/deploy.yml`).
-1. Pushing to `main` triggers the `build-and-test` and `deploy-staging` jobs automatically.
-2. The `deploy-production` job is protected by a **Manual Approval Gate** (configured in GitHub Settings → Environments → `production`).
-3. Kubernetes manifests are separated by environment in `infra/k8s/`, with production enforcing stricter resource limits and higher replica counts.
+---
 
-## 📂 Repository Structure
-```text
-├── app/                  # Python Flask application & Dockerfile
-├── docs/                 # Scope, Architecture, Peer Feedback, Reflection
-├── infra/k8s/            # Kubernetes manifests (staging & production)
-├── pipeline/             # GitHub Actions CI/CD workflow
-├── scripts/              # Automation and smoke test scripts
-└── README.md             # You are here!
+## 4. 🏗️ Deployment Pipeline
+
+1. Push to `main` → triggers `build-and-test` and `deploy-staging` automatically
+2. Smoke test runs post-staging deploy
+3. `deploy-production` is blocked by a **Manual Approval Gate** (GitHub Settings → Environments → `production` → Required reviewers: `ob002`)
+4. Kubernetes manifests in `infra/k8s/` are environment-specific — production enforces resource limits and 3 replicas via ConfigMap
+
+### Fault Scenario (Demo)
+```bash
+# Kill a staging pod — Kubernetes restarts it automatically
+kubectl delete pod -l app=kijani-kiosk -n kijani-staging
+# Watch recovery
+kubectl get pods -n kijani-staging -w
 ```
 
-## 🤝 Peer Feedback & Governance
-- See [docs/peer-feedback-log.md](docs/peer-feedback-log.md) for resolved improvements.
-- See [docs/scope-document.md](docs/scope-document.md) for AI governance and integrity statements.
+---
+
+## 5. 📂 Repository Structure
+
+```text
+├── app/                        # Flask app, Dockerfile, .dockerignore
+├── docs/
+│   ├── scope-document.md       # CAP-1: project scope, four layers, success criteria
+│   ├── ai-governance-log.md    # CAP-3: every AI use, what it got wrong, human action
+│   ├── test-plan.md            # CAP-6: written before peer review session
+│   ├── peer-feedback-log.md    # CAP-6: 3 issues, severity, commit evidence
+│   ├── reflection.md           # CAP-8: specific wrong decision, changed thinking
+│   └── architecture.png        # Generated from Mermaid
+├── infra/
+│   ├── ansible/
+│   │   └── configure-staging.yml   # Ansible: configure staging post-Terraform
+│   ├── k8s/
+│   │   ├── staging-configmap.yaml  # DB_HOST=kk-payments-staging-db
+│   │   ├── staging-deployment.yaml
+│   │   ├── prod-configmap.yaml     # DB_HOST=kk-payments-prod-db
+│   │   └── prod-deployment.yaml    # 3 replicas + resource limits
+│   └── prometheus-alerts.yaml      # Alert rules on kk-payments signals
+├── pipeline/
+│   └── deploy.yml              # GitHub Actions workflow (copy — canonical: .github/workflows/)
+└── scripts/
+    └── smoke-test.sh
+```
 
 ---
+
+## 6. 🔑 Key Decisions & Trade-offs
+
+| Decision | Chosen | Alternative | Reason |
+|----------|--------|-------------|--------|
+| CI/CD tool | GitHub Actions | Jenkins | No separate server to provision; native GitHub integration; `environment:` block gives approval gate for free |
+| Local K8s | Minikube/Kind | EKS/GKE | Zero cost for capstone; same manifest format works on cloud with no changes |
+| Config management | Ansible | Helm | Ansible is already in the course stack; Helm adds templating complexity not needed at this scale |
+
+---
+
+## 7. 🚧 Production Gaps (What's Not Done Yet)
+
+| Gap | What's Needed to Fix It |
+|-----|------------------------|
+| TLS/HTTPS | Add cert-manager + Let's Encrypt Issuer to `infra/k8s/` |
+| Real DB | Replace mock in-memory store with a provisioned PostgreSQL StatefulSet |
+| Horizontal Pod Autoscaler | Add HPA manifest targeting CPU > 70% |
+| Secrets management | Replace ConfigMap DB_HOST with Kubernetes Secrets or AWS Secrets Manager |
+| Multi-day commit history | Feature branches and PRs from day one (see reflection) |
+
+---
+
+## 🤝 Peer Feedback & Governance
+
+- [docs/peer-feedback-log.md](docs/peer-feedback-log.md) — 3 issues, all resolved with commit evidence
+- [docs/ai-governance-log.md](docs/ai-governance-log.md) — every AI use disclosed with "what it got wrong"
+- [docs/test-plan.md](docs/test-plan.md) — written before peer review session
+
 <details>
-<summary><strong>📊 Architecture Diagram (Mermaid)</strong></summary>
+<summary><strong>📊 Architecture Diagram (Mermaid source)</strong></summary>
 
 ```mermaid
 graph TD
     subgraph Developer
         A[Developer] -->|git push / PR| B(GitHub Repository)
     end
-    subgraph CI/CD Pipeline - GitHub Actions
+    subgraph CI_CD_Pipeline
         B -->|Trigger on main| C[Build & Test]
         C -->|Success| D[Build Docker Image]
         D -->|Push to Registry| E[(Container Registry)]
@@ -87,7 +153,7 @@ graph TD
         G -->|Pass| H{Manual Approval Gate}
         H -->|Approved| I[Deploy to Production]
     end
-    subgraph Kubernetes Cluster
+    subgraph Kubernetes_Cluster
         subgraph kijani-staging
             F --> J[(Staging Pod)]
         end
