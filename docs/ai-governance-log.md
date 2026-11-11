@@ -46,3 +46,18 @@
 | **What It Got Wrong** | Two failures discovered during diagnostic testing: (1) Minikube cannot pull an image that only exists in the local Docker daemon without `imagePullPolicy: IfNotPresent` — the pod would enter `ImagePullBackOff`. (2) The smoke test port-forward targeted `svc/kk-payments` which did not exist because no Service manifest was ever generated — the port-forward would fail immediately with "service not found". Neither failure would be caught until the pipeline actually ran. |
 | **Human Action Taken** | Added `imagePullPolicy: IfNotPresent` to `infra/k8s/deployment.yaml`. Created `infra/k8s/service.yaml` — ClusterIP Service named `kk-payments` on port 5000. Updated both Deploy stages in the Jenkinsfile to apply `service.yaml` before the Deployment. Verified by running `grep imagePullPolicy infra/k8s/deployment.yaml` and `cat infra/k8s/service.yaml`. Committed in PR #4, commit `794d21d`. |
 | **Governance Checklist** | ✅ Reviewed line-by-line · ✅ Tested locally · ✅ Adapted for context · ✅ Disclosed here |
+
+---
+
+## Entry 4
+
+| Field | Detail |
+|-------|--------|
+| **Date** | 2026-11-11 |
+| **Tool Used** | LLM (Amazon Q) |
+| **Task** | Load a locally built Docker image into Minikube so Kubernetes pods can pull it |
+| **Prompt Given** | "How do I load a local Docker image into Minikube so kubectl can use it?" |
+| **What It Produced** | The command `docker save $IMAGE \| docker exec -i minikube docker load` |
+| **What It Got Wrong** | Minikube's container runtime is containerd (confirmed via `minikube start` output: `containerd 2.3.4`), not Docker. The `docker load` command targets the Docker daemon inside the Minikube VM, which does not exist. Running it produced "unrecognized image format" because containerd does not understand the Docker load protocol. |
+| **Human Action Taken** | Identified the correct containerd import command: `docker save $IMAGE \| docker exec -i minikube ctr -n k8s.io images import -`. Tested manually: `docker save kijani-kiosk:test \| docker exec -i minikube ctr -n k8s.io images import -` confirmed `docker.io/library/kijani-kiosk:test` visible in `minikube ctr -n k8s.io images ls`. Updated the Jenkinsfile Build stage accordingly. Committed in PR #6, `b9e80b8`. |
+| **Governance Checklist** | ✅ Reviewed line-by-line · ✅ Tested with real image · ✅ Adapted for context · ✅ Disclosed here |
