@@ -17,6 +17,7 @@ spec:
       containers:
       - name: kiosk-api
         image: IMAGE_PLACEHOLDER
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 5000
         envFrom:
