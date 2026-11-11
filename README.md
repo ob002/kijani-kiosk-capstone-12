@@ -137,6 +137,12 @@ kubectl get pods -n kijani-staging -w
 
 ---
 
+## 📸 Evidence
+
+Jenkins pipeline runs are documented in [docs/evidence/](docs/evidence/README.md):
+- **Build #2 (green):** triggered by an SCM change, passed the smoke test and manual approval, deployed to production.
+- **Build #3 (fault injection):** `INJECT_FAULT=true` made the staging health check return 500, the pipeline stopped before the approval gate, and staging was rolled back automatically. Production was not touched.
+
 ## 🤝 Peer Feedback & Governance
 
 - [docs/peer-feedback-log.md](docs/peer-feedback-log.md) — 3 issues, all resolved with commit evidence
@@ -168,10 +174,10 @@ graph TD
             I --> K[(Production Pod)]
         end
     end
-    subgraph Observability
-        L[Prometheus] -.->|Scrape Metrics| J
-        L -.->|Scrape Metrics| K
-        L -->|Alert on High Error Rate| M[Grafana / Alertmanager]
+    subgraph Observability_PLANNED["Observability (planned, not deployed)"]
+        L[Prometheus] -.->|Scrape Metrics - planned| J
+        L -.->|Scrape Metrics - planned| K
+        L -.->|Alert on High Error Rate - planned| M[Grafana / Alertmanager]
     end
     style H fill:#f9f,stroke:#333,stroke-width:2px
     style M fill:#ff9,stroke:#333,stroke-width:2px

@@ -1,0 +1,26 @@
+# Captured 2026-11-11T16:59:18+03:00 after Jenkins build #3 (INJECT_FAULT=true)
+
+$ kubectl get pods -n kijani-staging
+NAME                           READY   STATUS    RESTARTS   AGE
+kk-payments-8576cf7fd8-wdg4v   1/1     Running   0          12m
+kk-payments-8576cf7fd8-xvsds   1/1     Running   0          12m
+
+$ kubectl rollout history deployment/kk-payments -n kijani-staging
+deployment.apps/kk-payments 
+REVISION  CHANGE-CAUSE
+1         <none>
+3         <none>
+4         <none>
+
+$ kubectl get deploy kk-payments -n kijani-staging -o jsonpath={.spec.template.spec.containers[0].env}
+
+
+$ curl -s -w "\nHTTP %{http_code}\n" http://localhost:5055/health   (port-forward to staging svc)
+{"environment":"staging","status":"healthy"}
+
+HTTP 200
+
+$ kubectl get pods -n kijani-production
+NAME                           READY   STATUS    RESTARTS   AGE
+kk-payments-8576cf7fd8-788nz   1/1     Running   0          35m
+kk-payments-8576cf7fd8-cswk4   1/1     Running   0          35m
