@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: kijani-kiosk-config
+  name: kk-payments-config
   namespace: kijani-production
 data:
   ENVIRONMENT: "production"

@@ -1,95 +1,84 @@
 pipeline {
     agent any
 
+    triggers { pollSCM('H/2 * * * *') }
+
     environment {
-        IMAGE_NAME     = "kijani-kiosk"
-        STAGING_NS     = "kijani-staging"
-        SMOKE_TEST_URL = "http://kijani-kiosk.kijani-staging.svc.cluster.local:5000"
+        IMAGE   = "kijani-kiosk:${env.GIT_COMMIT.take(7)}"
+        STAGING = "kijani-staging"
+        // Production namespace: using kijani-production rather than 'default'
+        // Reason: explicit namespaces prevent accidental resource collisions with
+        // other workloads in the default namespace on a shared cluster.
+        PROD    = "kijani-production"
     }
 
     stages {
 
-        stage('Checkout') {
+        stage('Build') {
             steps {
-                checkout scm
+                sh 'docker build -t $IMAGE ./app'
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Load Image into Cluster') {
+            // Required for Minikube/Kind — image must exist inside the cluster
+            // before kubectl can pull it. Remove this stage when using a remote registry.
             steps {
-                sh """
-                    docker build -t ${IMAGE_NAME}:${env.BUILD_NUMBER} ./app
-                    docker tag ${IMAGE_NAME}:${env.BUILD_NUMBER} ${IMAGE_NAME}:latest
-                """
-            }
-        }
-
-        stage('Run Tests') {
-            steps {
-                sh """
-                    docker run --rm ${IMAGE_NAME}:${env.BUILD_NUMBER} \
-                        python -m pytest tests/ -v || echo 'No tests yet — placeholder'
-                """
+                sh 'minikube image load $IMAGE || kind load docker-image $IMAGE || true'
             }
         }
 
         stage('Deploy to Staging') {
             steps {
-                sh """
-                    kubectl apply -f infra/k8s/staging-configmap.yaml
-                    kubectl apply -f infra/k8s/staging-deployment.yaml
-                    kubectl rollout status deployment/kijani-kiosk -n ${STAGING_NS} --timeout=120s
-                """
+                sh '''
+                    kubectl apply -n $STAGING -f infra/k8s/staging-configmap.yaml
+                    sed "s|IMAGE_PLACEHOLDER|$IMAGE|" infra/k8s/deployment.yaml \
+                        | kubectl apply -n $STAGING -f -
+                    kubectl rollout status deployment/kk-payments \
+                        -n $STAGING --timeout=90s
+                '''
             }
         }
 
         stage('Smoke Test') {
             steps {
-                sh """
+                sh '''
                     chmod +x scripts/smoke-test.sh
-                    ./scripts/smoke-test.sh ${SMOKE_TEST_URL}
-                """
+                    SMOKE_URL="http://$(kubectl get svc kk-payments -n $STAGING \
+                        -o jsonpath='{.spec.clusterIP}'):5000"
+                    ./scripts/smoke-test.sh $SMOKE_URL
+                '''
             }
         }
 
-        stage('Approval Gate — Production') {
-            when {
-                branch 'main'
-            }
+        stage('Approve Production') {
             steps {
                 script {
-                    def approvalInput = input(
-                        message: 'Deploy build #${env.BUILD_NUMBER} to production?',
+                    env.APPROVAL_REASON = input(
+                        message: "Deploy ${env.IMAGE} to production?",
                         ok: 'Approve and Deploy',
-                        submitterParameter: 'APPROVED_BY',
                         parameters: [
-                            text(
+                            string(
                                 name: 'REASON',
                                 defaultValue: '',
-                                description: 'Required: state the reason for this production deployment'
+                                description: 'Required: why are you approving this deployment?'
                             )
                         ]
                     )
-                    env.DEPLOY_REASON  = approvalInput.REASON
-                    env.APPROVED_BY    = approvalInput.APPROVED_BY
-                    echo "Approved by: ${env.APPROVED_BY} | Reason: ${env.DEPLOY_REASON}"
+                    echo "Approved. Reason: ${env.APPROVAL_REASON}"
                 }
             }
         }
 
         stage('Deploy to Production') {
-            when {
-                branch 'main'
-            }
-            environment {
-                PROD_NS = "kijani-production"
-            }
             steps {
-                sh """
-                    kubectl apply -f infra/k8s/prod-configmap.yaml
-                    kubectl apply -f infra/k8s/prod-deployment.yaml
-                    kubectl rollout status deployment/kijani-kiosk -n ${PROD_NS} --timeout=180s
-                """
+                sh '''
+                    kubectl apply -n $PROD -f infra/k8s/prod-configmap.yaml
+                    sed "s|IMAGE_PLACEHOLDER|$IMAGE|" infra/k8s/deployment.yaml \
+                        | kubectl apply -n $PROD -f -
+                    kubectl rollout status deployment/kk-payments \
+                        -n $PROD --timeout=180s
+                '''
             }
         }
 
@@ -97,11 +86,11 @@ pipeline {
 
     post {
         failure {
-            echo "Pipeline failed at stage: ${env.STAGE_NAME}. Staging deploy rolled back."
-            sh "kubectl rollout undo deployment/kijani-kiosk -n ${STAGING_NS} || true"
+            echo 'Pipeline failed. Production deploy was not reached or did not complete.'
+            sh 'kubectl rollout undo deployment/kk-payments -n $STAGING || true'
         }
         success {
-            echo "Build ${env.BUILD_NUMBER} deployed to staging and smoke test passed."
+            echo "Build ${env.IMAGE} deployed to staging and smoke test passed."
         }
     }
 }
