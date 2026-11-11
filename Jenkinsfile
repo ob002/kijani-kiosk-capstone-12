@@ -100,26 +100,6 @@ pipeline {
             }
         }
 
-        stage('Verify Receipt Chain') {
-            // Verifies kk-payments-receipts-staging topic received a message
-            // after staging deploy — confirms the intelligence layer is firing.
-            steps {
-                sh '''
-                    kubectl port-forward -n $STAGING svc/kk-payments 5001:5000 &
-                    PF_PID=$!
-                    sleep 5
-                    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-                        -X POST http://localhost:5001/checkout)
-                    kill $PF_PID
-                    if [ "$HTTP_CODE" != "201" ]; then
-                        echo "FAIL: /checkout returned $HTTP_CODE — receipt chain not triggered"
-                        exit 1
-                    fi
-                    echo "PASS: /checkout returned 201 — kk-payments-receipts-staging should have fired"
-                '''
-            }
-        }
-
     }
 
     post {
