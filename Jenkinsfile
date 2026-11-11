@@ -52,6 +52,47 @@ pipeline {
             }
         }
 
+        stage('Approval Gate — Production') {
+            when {
+                branch 'main'
+            }
+            steps {
+                script {
+                    def approvalInput = input(
+                        message: 'Deploy build #${env.BUILD_NUMBER} to production?',
+                        ok: 'Approve and Deploy',
+                        submitterParameter: 'APPROVED_BY',
+                        parameters: [
+                            text(
+                                name: 'REASON',
+                                defaultValue: '',
+                                description: 'Required: state the reason for this production deployment'
+                            )
+                        ]
+                    )
+                    env.DEPLOY_REASON  = approvalInput.REASON
+                    env.APPROVED_BY    = approvalInput.APPROVED_BY
+                    echo "Approved by: ${env.APPROVED_BY} | Reason: ${env.DEPLOY_REASON}"
+                }
+            }
+        }
+
+        stage('Deploy to Production') {
+            when {
+                branch 'main'
+            }
+            environment {
+                PROD_NS = "kijani-production"
+            }
+            steps {
+                sh """
+                    kubectl apply -f infra/k8s/prod-configmap.yaml
+                    kubectl apply -f infra/k8s/prod-deployment.yaml
+                    kubectl rollout status deployment/kijani-kiosk -n ${PROD_NS} --timeout=180s
+                """
+            }
+        }
+
     }
 
     post {
