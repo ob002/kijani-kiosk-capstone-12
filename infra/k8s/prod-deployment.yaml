@@ -27,9 +27,9 @@ spec:
         image: your-dockerhub-username/kijani-kiosk:latest
         ports:
         - containerPort: 5000
-        env:
-        - name: ENVIRONMENT
-          value: "production"
+        envFrom:
+        - configMapRef:
+            name: kijani-kiosk-config
         resources:
           requests:
             memory: "128Mi"
