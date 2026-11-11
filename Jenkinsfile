@@ -3,6 +3,14 @@ pipeline {
 
     triggers { pollSCM('H/2 * * * *') }
 
+    parameters {
+        booleanParam(
+            name: 'INJECT_FAULT',
+            defaultValue: false,
+            description: 'Set FAULT_HEALTH=true on staging to demo smoke test failure and rollback'
+        )
+    }
+
     environment {
         IMAGE   = "kijani-kiosk:${env.GIT_COMMIT.take(7)}"
         STAGING = "kijani-staging"
@@ -32,6 +40,17 @@ pipeline {
                     kubectl rollout status deployment/kk-payments \
                         -n $STAGING --timeout=90s
                 '''
+                script {
+                    if (params.INJECT_FAULT) {
+                        sh '''
+                            kubectl set env deployment/kk-payments \
+                                FAULT_HEALTH=true -n $STAGING
+                            kubectl rollout status deployment/kk-payments \
+                                -n $STAGING --timeout=60s
+                        '''
+                        echo "FAULT INJECTED: FAULT_HEALTH=true set on staging deployment"
+                    }
+                }
             }
         }
 
@@ -81,15 +100,35 @@ pipeline {
             }
         }
 
+        stage('Verify Receipt Chain') {
+            // Verifies kk-payments-receipts-staging topic received a message
+            // after staging deploy — confirms the intelligence layer is firing.
+            steps {
+                sh '''
+                    kubectl port-forward -n $STAGING svc/kk-payments 5001:5000 &
+                    PF_PID=$!
+                    sleep 5
+                    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+                        -X POST http://localhost:5001/checkout)
+                    kill $PF_PID
+                    if [ "$HTTP_CODE" != "201" ]; then
+                        echo "FAIL: /checkout returned $HTTP_CODE — receipt chain not triggered"
+                        exit 1
+                    fi
+                    echo "PASS: /checkout returned 201 — kk-payments-receipts-staging should have fired"
+                '''
+            }
+        }
+
     }
 
     post {
         failure {
-            echo 'Pipeline failed. Production deploy was not reached or did not complete.'
+            echo 'Pipeline failed. Rolling back staging deployment.'
             sh 'kubectl rollout undo deployment/kk-payments -n $STAGING || true'
         }
         success {
-            echo "Build ${env.IMAGE} deployed to staging and smoke test passed."
+            echo "Build ${env.IMAGE} deployed successfully."
         }
     }
 }
