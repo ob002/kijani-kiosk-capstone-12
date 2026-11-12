@@ -1,0 +1,15 @@
+# Prometheus scrape targets and loaded rules (2026-11-12T18:18:59+03:00)
+$ kubectl get pods -n monitoring
+NAME                          READY   STATUS    RESTARTS   AGE
+prometheus-75dbc8785b-48m64   1/1     Running   0          11m
+
+$ curl -s localhost:9090/api/v1/targets
+kk-payments kijani-production kk-payments-8576cf7fd8-cswk4 up last_scrape=2026-11-12T15:18:51.362694682Z
+kk-payments kijani-staging kk-payments-b69b47b5-vbcq5 up last_scrape=2026-11-12T15:18:59.285556438Z
+kk-payments kijani-staging kk-payments-b69b47b5-8pdmz up last_scrape=2026-11-12T15:18:55.291855787Z
+kk-payments kijani-production kk-payments-8576cf7fd8-788nz up last_scrape=2026-11-12T15:18:53.748333592Z
+
+$ curl -s localhost:9090/api/v1/rules
+HighErrorRate health=ok state=inactive
+PodCrashLoopBackOff health=ok state=inactive
+HighRequestLatency health=ok state=inactive

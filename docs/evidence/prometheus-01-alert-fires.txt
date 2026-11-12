@@ -1,0 +1,42 @@
+# Prometheus alert test: HighErrorRate
+# Fault injected: 2026-11-12T18:11:19+03:00
+$ kubectl set env deployment/kk-payments FAULT_HEALTH=true -n kijani-staging
+deployment.apps/kk-payments env updated
+
+# Alert FIRING observed: 2026-11-12T18:14:01+03:00
+$ curl -s localhost:9090/api/v1/alerts | jq
+{
+  "alertname": "HighErrorRate",
+  "namespace": "kijani-staging",
+  "severity": "critical",
+  "state": "firing",
+  "activeAt": "2026-11-12T15:11:58.651777807Z",
+  "value": "3.609126538724115e-01"
+}
+
+$ error ratio by namespace
+kijani-staging 0.3765041413200865
+
+$ kubectl get pods -n kijani-staging
+NAME                           READY   STATUS    RESTARTS      AGE
+kk-payments-85dd644bc8-nl2j9   1/1     Running   2 (41s ago)   2m42s
+kk-payments-85dd644bc8-x2l7n   1/1     Running   2 (39s ago)   2m39s
+
+# Recovery started: 2026-11-12T18:14:09+03:00
+$ kubectl rollout undo deployment/kk-payments -n kijani-staging
+deployment.apps/kk-payments rolled back
+Waiting for deployment "kk-payments" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "kk-payments" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "kk-payments" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "kk-payments" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "kk-payments" rollout to finish: 1 old replicas are pending termination...
+deployment "kk-payments" successfully rolled out
+
+# Alert RESOLVED (no active HighErrorRate alerts): 2026-11-12T18:18:46+03:00
+HighErrorRate inactive
+PodCrashLoopBackOff inactive
+HighRequestLatency inactive
+NAME                         READY   STATUS    RESTARTS   AGE
+kk-payments-b69b47b5-8pdmz   1/1     Running   0          4m34s
+kk-payments-b69b47b5-vbcq5   1/1     Running   0          4m36s
+

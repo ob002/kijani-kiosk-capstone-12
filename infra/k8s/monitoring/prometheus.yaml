@@ -1,0 +1,135 @@
+# Minimal Prometheus for Minikube: scrapes kk-payments /metrics in both
+# kijani namespaces and evaluates infra/prometheus-alerts.yaml.
+# No Alertmanager or Grafana: firing alerts are visible at :9090/alerts.
+#
+# Deploy:
+#   kubectl apply -f infra/k8s/monitoring/prometheus.yaml
+#   kubectl create configmap prometheus-rules -n monitoring \
+#     --from-file=alerts.yaml=infra/prometheus-alerts.yaml \
+#     --dry-run=client -o yaml | kubectl apply -f -
+#   kubectl rollout restart deployment/prometheus -n monitoring
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus-pod-discovery
+rules:
+- apiGroups: [""]
+  resources: ["pods", "endpoints", "services"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-pod-discovery
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus-pod-discovery
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+    rule_files:
+      - /etc/prometheus/rules/*.yaml
+    scrape_configs:
+      - job_name: kk-payments
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [kijani-staging, kijani-production]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            regex: kk-payments
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            regex: "5000"
+            action: keep
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v3.5.0
+        args:
+          - --config.file=/etc/prometheus/prometheus.yml
+          - --storage.tsdb.retention.time=2d
+        ports:
+        - containerPort: 9090
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9090
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: config
+          mountPath: /etc/prometheus/prometheus.yml
+          subPath: prometheus.yml
+        - name: rules
+          mountPath: /etc/prometheus/rules
+      volumes:
+      - name: config
+        configMap:
+          name: prometheus-config
+      - name: rules
+        configMap:
+          name: prometheus-rules
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  selector:
+    app: prometheus
+  ports:
+  - port: 9090
+    targetPort: 9090

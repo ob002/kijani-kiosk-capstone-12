@@ -1,19 +1,24 @@
 groups:
   - name: kijani-kiosk-alerts
     rules:
+      # Deployed and tested: see docs/evidence/prometheus-*.txt
+      # Ratio of 5xx responses to all responses, per namespace.
+      # sum by (namespace) is needed: without it each 500 series is divided by
+      # itself (labels must match exactly), so the ratio is always 1.
       - alert: HighErrorRate
         expr: |
-          rate(kk_payments_requests_total{status="500"}[5m])
+          sum by (namespace) (rate(kk_payments_requests_total{status=~"5.."}[5m]))
           /
-          rate(kk_payments_requests_total[5m]) > 0.05
+          sum by (namespace) (rate(kk_payments_requests_total[5m])) > 0.05
         for: 2m
         labels:
           severity: critical
-          namespace: kijani-staging
         annotations:
           summary: "High error rate on kk-payments"
-          description: "Error rate above 5% for 2+ minutes in {{ $labels.namespace }}"
+          description: "5xx rate above 5% for 2+ minutes in {{ $labels.namespace }}"
 
+      # Requires kube-state-metrics, which is NOT deployed yet (Production Gap).
+      # This rule loads but cannot fire until kube-state-metrics is installed.
       - alert: PodCrashLoopBackOff
         expr: |
           kube_pod_container_status_waiting_reason{
@@ -30,11 +35,11 @@ groups:
       - alert: HighRequestLatency
         expr: |
           histogram_quantile(0.95,
-            rate(kk_payments_request_latency_seconds_bucket[5m])
+            sum by (namespace, le) (rate(kk_payments_request_latency_seconds_bucket[5m]))
           ) > 1.0
         for: 2m
         labels:
           severity: warning
         annotations:
           summary: "High p95 latency on kk-payments"
-          description: "p95 latency above 1s for 2+ minutes"
+          description: "p95 latency above 1s for 2+ minutes in {{ $labels.namespace }}"
