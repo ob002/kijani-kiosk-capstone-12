@@ -14,7 +14,7 @@
 | **Prompt Given** | "Generate a Kubernetes Deployment YAML for a Flask app in a namespace called kijani-staging with a liveness probe on /health" |
 | **What It Produced** | A valid `staging-deployment.yaml` with namespace, 2 replicas, liveness probe, and env var injection |
 | **What It Got Wrong** | Production manifest was identical to staging — no resource requests/limits, same replica count. This would cause node starvation in a real cluster. |
-| **Human Action Taken** | Manually added `resources.requests` (128Mi / 100m) and `resources.limits` (256Mi / 250m) to `prod-deployment.yaml`, increased replicas to 3. Committed in `77fad28`. |
+| **Human Action Taken** | Manually added `resources.requests` (128Mi / 100m) and `resources.limits` (256Mi / 250m) to `prod-deployment.yaml`, increased replicas to 3. Committed in `77fad28`. **Correction (2026-11-12):** in `b5c5bdf` the two manifests were merged into one shared `deployment.yaml` with 2 replicas, so production no longer runs 3. The resource limits survived the merge and now apply to both environments. 3 production replicas is listed as a Production Gap in the README. |
 | **Governance Checklist** | ✅ Reviewed line-by-line · ✅ Tested locally · ✅ Adapted for context · ✅ Disclosed here |
 
 ---
@@ -68,7 +68,7 @@
 
 | Field | Detail |
 |-------|--------|
-| **Date** | 2026-11-12 |
+| **Date** | 2026-11-11 (commit `1c93435`, 15:44 EAT) |
 | **Tool Used** | LLM (Amazon Q) |
 | **Task** | Add a receipt chain verification stage to the Jenkinsfile |
 | **Prompt Given** | "Add a stage after Deploy to Production that verifies the receipt chain fired by POSTing to /checkout and checking for a 201 response" |
@@ -76,3 +76,20 @@
 | **What It Got Wrong** | Three problems: (1) The stage ran after Deploy to Production — if it failed, `post { failure }` would roll back the staging deployment while the broken build stayed live in production, leaving production in a worse state than before. (2) The stage used a different port (5001) from the smoke test (5000) with no explanation, which would fail if port 5001 was already in use. (3) The stage only checked that `/checkout` returned 201 — it never verified that a message was actually written to `kk-payments-receipts-staging`. A 201 from the app proves nothing about the receipt chain. The receipt chain integration itself was never built (no S3 write in `app.py`), so the stage was testing something that did not exist. |
 | **Human Action Taken** | Removed the `Verify Receipt Chain` stage entirely. Documented the receipt chain as a Production Gap in `README.md` with a specific fix: add `boto3` S3 write in `/checkout`, add bucket notification to trigger the serverless chain. Committed in PR #9. |
 | **Governance Checklist** | ✅ Reviewed line-by-line · ✅ Failure mode identified before running · ✅ Removed rather than left as misleading · ✅ Disclosed here |
+
+---
+
+## Entry 6
+
+> Drafted by Claude Code from its own session record, so the facts are exact. ob002 to review and confirm before submission.
+
+| Field | Detail |
+|-------|--------|
+| **Date** | 2026-11-12 |
+| **Tool Used** | Claude Code (Anthropic, Claude Opus 5.5) in VS Code, with shell access to this repo and the local minikube cluster |
+| **Task** | Bring the repo in line with what is actually deployed before submission: run Ansible, deploy Prometheus and prove an alert fires, redraw the architecture diagram, correct README / scope / test plan |
+| **Prompt Given** | "help me fix the ones with problems before submission" (after asking it to review the repo against the Canvas rubric) |
+| **What It Produced** | PR #12 (README and scope corrections, `.gitignore`); a rewritten `infra/ansible/configure-staging.yml`; `infra/k8s/monitoring/prometheus.yaml`; a fixed `HighErrorRate` expression; a new `docs/architecture.png`; the one-page scope document; the dated revision in `docs/test-plan.md`; evidence files `ansible-01`, `prometheus-00/01`, `selfheal-01` (it ran the commands that produced them) |
+| **What It Got Wrong** | (1) Its first version of the playbook used `namespace` as a variable name, which is reserved in Ansible, and assumed the `kubernetes` Python library was installed. The first run failed on the first task. (2) It found but had not introduced a bug in the existing alert rule: `rate(...{status="500"}) / rate(...)` without `sum by (namespace)` divides each 500 series by itself, so the ratio is always 1 once any error occurs. This expression had been in the repo since `f079ba4` and had never been evaluated because Prometheus was not deployed. (3) Its first command to wait for Prometheus targets used `python3`, which a local hook blocks; the loop ran until timeout and had to be stopped. |
+| **Human Action Taken** | _ob002: describe what you checked. Suggested minimum: open `http://localhost:9090/alerts` yourself, re-run `ansible-playbook infra/ansible/configure-staging.yml`, read the diff of PR #13 before merging._ |
+| **Governance Checklist** | ⬜ Reviewed line-by-line · ✅ Tested against the real cluster (evidence files) · ✅ Adapted for context · ✅ Disclosed here |

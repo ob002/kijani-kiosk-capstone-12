@@ -27,6 +27,7 @@
 - **Commit Evidence:** `77fad28`
 - **Before:** No `resources` block in prod manifest
 - **After:** Explicit limits enforced — verified against test case T7 in test plan
+- **Follow-up (2026-11-12):** `b5c5bdf` merged the staging and production manifests into one `deployment.yaml`. The resource limits were kept and now apply to both environments (re-verified as T7b in `docs/test-plan.md`). The replica increase to 3 was lost in the merge; production runs 2. Tracked as a Production Gap in the README.
 - **Status:** RESOLVED ✅
 
 ---
