@@ -1,0 +1,44 @@
+# Terraform-managed resources and the kk-payments Service (2026-11-12T19:45:06+03:00)
+# State was missing in this clone; namespaces were adopted with 'terraform import' (no cluster change).
+
+$ terraform state list
+kubernetes_namespace.production
+kubernetes_namespace.staging
+
+$ terraform output
+production_namespace = "kijani-production"
+staging_namespace = "kijani-staging"
+
+$ terraform plan
+No changes. Your infrastructure matches the configuration.
+
+$ kubectl get ns -l project=kijani-kiosk --show-labels
+NAME                STATUS   AGE   LABELS
+kijani-production   Active   30h   env=production,kubernetes.io/metadata.name=kijani-production,project=kijani-kiosk
+kijani-staging      Active   30h   configured-by=ansible,env=staging,kubernetes.io/metadata.name=kijani-staging,project=kijani-kiosk
+
+$ kubectl get svc,endpoints -n kijani-staging
+NAME                  TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
+service/kk-payments   ClusterIP   10.110.221.235   <none>        5000/TCP   28h
+
+NAME                    ENDPOINTS                           AGE
+endpoints/kk-payments   10.244.0.12:5000,10.244.0.13:5000   28h
+
+$ kubectl describe svc kk-payments -n kijani-staging
+Name:                     kk-payments
+Namespace:                kijani-staging
+Selector:                 app=kk-payments
+Type:                     ClusterIP
+IP:                       10.110.221.235
+Port:                     <unset>  5000/TCP
+TargetPort:               5000/TCP
+Endpoints:                10.244.0.13:5000,10.244.0.12:5000
+
+$ kubectl get configmap kk-payments-config -n kijani-staging -o jsonpath='{.data}'
+{"DB_HOST":"kk-payments-staging-db","ENVIRONMENT":"staging","LOG_LEVEL":"debug"}
+$ kubectl get configmap kk-payments-config -n kijani-production -o jsonpath='{.data}'
+{"DB_HOST":"kk-payments-prod-db","ENVIRONMENT":"production","LOG_LEVEL":"warn"}
+
+$ kubectl port-forward -n kijani-staging svc/kk-payments 5055:5000 & curl localhost:5055/health
+{"environment":"staging","status":"healthy"}
+

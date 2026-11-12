@@ -21,6 +21,13 @@ resource "kubernetes_namespace" "staging" {
       project = "kijani-kiosk"
     }
   }
+
+  # Ansible (infra/ansible/configure-staging.yml) adds configured-by=ansible
+  # after Terraform creates the namespace. Without this, every terraform
+  # apply would strip that label: two tools fighting over one field.
+  lifecycle {
+    ignore_changes = [metadata[0].labels["configured-by"]]
+  }
 }
 
 resource "kubernetes_namespace" "production" {
