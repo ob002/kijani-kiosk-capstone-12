@@ -28,3 +28,13 @@ Captured 2026-11-11 on the local Jenkins (2.580.2) + minikube setup.
 | `fault-06-recovery-check.txt` | After rollback: staging pods healthy, `FAULT_HEALTH` no longer set, `/health` returns 200, production pods unchanged since build #2. Generated at 2026-11-11 16:59 EAT by an AI assistant (Claude Code) running the `kubectl`/`curl` commands shown in the file against the local minikube cluster; not a Jenkins artifact. |
 
 Rollout history on staging shows revisions 1, 3, 4: revision 3 was the faulty spec, and the undo re-applied the previous good spec as revision 4 (Kubernetes drops the old revision number when it is reused).
+
+## Ansible and Prometheus (2026-11-12)
+
+Run against the same minikube cluster. Commands were executed by Claude Code (AI assistant) at the user's request; output is unedited.
+
+| File | What it proves |
+|------|----------------|
+| `ansible-01-configure-staging.txt` | `ansible-playbook infra/ansible/configure-staging.yml` ran: 7 ok, 0 failed. Namespace labelled `configured-by=ansible`; ConfigMap and Service applied; assert confirms staging `DB_HOST=kk-payments-staging-db`. |
+| `prometheus-00-targets-and-rules.txt` | Prometheus pod running in `monitoring`; all 4 kk-payments pods (2 staging, 2 production) scraped and `up`; 3 alert rules loaded with `health=ok`. |
+| `prometheus-01-alert-fires.txt` | `FAULT_HEALTH=true` set on staging at 18:11:19. `HighErrorRate` went active at 18:11:58 and **firing** by 18:14:01, labelled `namespace=kijani-staging` only (5xx ratio ≈ 0.36). `kubectl rollout undo` at 18:14:09; alert cleared by 18:18:46. |

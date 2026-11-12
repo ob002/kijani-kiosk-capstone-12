@@ -30,3 +30,19 @@ This test plan covers the smoke test, pipeline gate, and namespace isolation. It
 - Load testing
 - TLS/certificate validation
 - Database persistence (app is stateless)
+
+---
+
+## Revision 2026-11-12: re-run against the current system
+
+The tables above are the original plan, kept unchanged as the record of what the reviewer tested against. Since then the pipeline moved from GitHub Actions to Jenkins, the two manifests were merged into one `deployment.yaml`, and the app label changed to `app=kk-payments`. T6, T7, T8 and F1 no longer run as written. Replacements, re-run on 2026-11-12:
+
+| ID | Replaces | Test | Method | Expected | Result |
+|----|----------|------|--------|----------|--------|
+| T6b | T6 | Shared manifest applies | `sed "s\|IMAGE_PLACEHOLDER\|x\|" infra/k8s/deployment.yaml \| kubectl apply --dry-run=client -n kijani-staging -f -` | `configured (dry run)` / `created (dry run)` | ✅ Pass |
+| T7b | T7 | Resource limits present (both envs share them) | `grep -A6 resources infra/k8s/deployment.yaml` | cpu + memory requests and limits | ✅ Pass |
+| T8b | T8 | Approval gate blocks production | Jenkins build #2 | Pipeline pauses at "Approve Production" until a person approves with a reason | ✅ Pass (`docs/evidence/green-06-*`) |
+| T9 | new | Failed smoke test blocks production | Jenkins build #3 with `INJECT_FAULT=true` | Production stages skipped, staging rolled back | ✅ Pass (`docs/evidence/fault-*`) |
+| T10 | new | Staging uses staging DB | `ansible-playbook infra/ansible/configure-staging.yml` | Assert `DB_HOST == kk-payments-staging-db` passes | ✅ Pass (`ansible-01-configure-staging.txt`) |
+| T11 | new | Alert fires on staging errors | `kubectl set env deployment/kk-payments FAULT_HEALTH=true -n kijani-staging`, watch `:9090/alerts` | `HighErrorRate` firing for `kijani-staging` only within 5 min; clears after rollback | ✅ Pass (`prometheus-01-alert-fires.txt`) |
+| F1b | F1 | Kill staging pods | `kubectl delete pod -l app=kk-payments -n kijani-staging` | ReplicaSet restores 2 Ready pods within 60 s | ✅ Pass, 34 s (`selfheal-01-pod-delete.txt`) |

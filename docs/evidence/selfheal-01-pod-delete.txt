@@ -1,0 +1,16 @@
+# Self-healing check: delete both staging pods
+# Start: 2026-11-12T18:20:29+03:00
+$ kubectl get pods -n kijani-staging
+NAME                         READY   STATUS    RESTARTS   AGE
+kk-payments-b69b47b5-8pdmz   1/1     Running   0          6m17s
+kk-payments-b69b47b5-vbcq5   1/1     Running   0          6m19s
+
+$ kubectl delete pod -l app=kk-payments -n kijani-staging --wait=false
+pod "kk-payments-b69b47b5-8pdmz" deleted from kijani-staging namespace
+pod "kk-payments-b69b47b5-vbcq5" deleted from kijani-staging namespace
+
+# 2/2 replacement pods Ready after 34s (2026-11-12T18:21:03+03:00)
+$ kubectl get pods -n kijani-staging
+NAME                         READY   STATUS    RESTARTS   AGE
+kk-payments-b69b47b5-k96m2   1/1     Running   0          34s
+kk-payments-b69b47b5-ntwww   1/1     Running   0          34s
