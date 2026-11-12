@@ -1,0 +1,56 @@
+# ansible-playbook infra/ansible/configure-staging.yml
+# Run: 2026-11-12T18:06:46+03:00 against minikube
+
+
+PLAY [Configure kijani-staging environment] ************************************
+
+TASK [Label the staging namespace (namespace itself is created by Terraform)] ***
+changed: [localhost]
+
+TASK [Apply staging ConfigMap (DB_HOST=kk-payments-staging-db)] ****************
+ok: [localhost]
+
+TASK [Apply kk-payments Service] ***********************************************
+ok: [localhost]
+
+TASK [Read back the staging ConfigMap] *****************************************
+ok: [localhost]
+
+TASK [Fail if staging is pointing at the production database] ******************
+ok: [localhost] => {
+    "changed": false,
+    "msg": "Staging DB_HOST is kk-payments-staging-db"
+}
+
+TASK [Report running kk-payments pods (deployed by Jenkins)] *******************
+ok: [localhost]
+
+TASK [Show pod status] *********************************************************
+ok: [localhost] => {
+    "msg": [
+        [
+            "kk-payments-b69b47b5-7qlcd",
+            "Running"
+        ],
+        [
+            "kk-payments-b69b47b5-bxmlc",
+            "Running"
+        ]
+    ]
+}
+
+PLAY RECAP *********************************************************************
+localhost                  : ok=7    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+
+
+# kubectl get ns kijani-staging --show-labels
+NAME             STATUS   AGE   LABELS
+kijani-staging   Active   28h   configured-by=ansible,env=staging,kubernetes.io/metadata.name=kijani-staging,project=kijani-kiosk
+
+# kubectl get configmap,svc -n kijani-staging
+NAME                           DATA   AGE
+configmap/kk-payments-config   3      26h
+configmap/kube-root-ca.crt     1      28h
+
+NAME                  TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
+service/kk-payments   ClusterIP   10.110.221.235   <none>        5000/TCP   26h
