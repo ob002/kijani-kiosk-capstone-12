@@ -24,3 +24,7 @@ Thumbs.db
 # Logs
 *.log
 mk-logs.txt
+
+# Editor / tool state
+*.swp
+.serena/

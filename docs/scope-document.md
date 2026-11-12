@@ -8,24 +8,26 @@
 ## 2. Core Objective
 Deliver a fully automated, secure, and observable infrastructure pipeline such that a new engineer can clone the repository, understand the architecture, and deploy a meaningful change to the staging environment within their first day.
 
+> **Revision note (2026-11-11):** The original plan named GitHub Actions for CI/CD; Track A requires Jenkins, so the pipeline was rebuilt in Jenkins. The Status column and layer descriptions below reflect what is actually deployed. Planned-but-not-built items are listed under Production Gaps in the README.
+
 ## 3. Technology Stack
 
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| **Infrastructure** | Terraform | Provision namespaces and cluster resources |
-| **Configuration** | Ansible | Configure the staging environment post-provision |
-| **Application** | Python 3.12 (Flask) | Stateless kiosk API |
-| **Containerisation** | Docker | Reproducible, portable builds |
-| **Orchestration** | Kubernetes | Namespace-isolated staging and production runtimes |
-| **CI/CD** | GitHub Actions | Automated build, test, deploy, and approval gate |
-| **Observability** | Prometheus + Grafana | Metrics scraping and alerting on kk-payments signals |
+| Layer | Technology | Purpose | Status |
+|-------|-----------|---------|--------|
+| **Infrastructure** | Terraform | Provision namespaces and cluster resources | Applied (both namespaces) |
+| **Configuration** | Ansible | Configure the staging environment post-provision | Playbook written, not yet executed |
+| **Application** | Python 3.12 (Flask) | Stateless kiosk API | Running |
+| **Containerisation** | Docker | Reproducible, portable builds | Built per commit by Jenkins |
+| **Orchestration** | Kubernetes (Minikube) | Namespace-isolated staging and production runtimes | Running |
+| **CI/CD** | Jenkins | Automated build, deploy, smoke test, and approval gate | Running (no unit-test stage yet) |
+| **Observability** | Prometheus + Grafana | Metrics scraping and alerting on kk-payments signals | Planned, not deployed (alert rules written) |
 
 ## 4. Four-Layer Architecture Map (Dimension 2)
 
-- **Infrastructure layer:** Terraform provisions `kijani-staging` and `kijani-production` namespaces. Ansible configures environment-specific settings post-provision.
-- **Delivery layer:** GitHub Actions pipeline — build → test → deploy-staging → smoke test → manual approval gate → deploy-production.
-- **Runtime layer:** Kubernetes Deployments with strict namespace isolation. Production enforces 3 replicas and CPU/memory resource limits. Staging runs 2 replicas with relaxed limits.
-- **Intelligence layer:** Prometheus scrapes pod metrics from both namespaces. Grafana alert fires when the kk-payments error rate exceeds 5% or a pod enters CrashLoopBackOff. Alert config is committed to the repo.
+- **Infrastructure layer:** Terraform provisions `kijani-staging` and `kijani-production` namespaces. An Ansible playbook for staging configuration is written but not yet executed.
+- **Delivery layer:** Jenkins pipeline — build → deploy-staging → smoke test → manual approval gate → deploy-production. On failure, staging is rolled back automatically.
+- **Runtime layer:** Kubernetes Deployments with namespace isolation. Both namespaces currently run the same manifest: 2 replicas with CPU/memory requests and limits. Only the ConfigMap differs. (Planned: 3 replicas and stricter limits in production.)
+- **Intelligence layer (planned, not deployed):** Alert rules for kk-payments error rate and pod restarts are committed in `infra/prometheus-alerts.yaml`. Prometheus and Grafana are not installed, so nothing is scraped and no alert can fire yet.
 
 ## 5. Environment Strategy
 
@@ -48,10 +50,10 @@ Deliver a fully automated, secure, and observable infrastructure pipeline such t
 - **Database provisioning:** Excluded because kk-payments uses a mock in-memory store for the capstone scenario; real DB provisioning is a separate infrastructure concern.
 
 ## 8. Success Criteria (each demonstrable in the live demo)
-- [ ] Merge to `main` triggers a staging deploy and smoke test — visible in the Actions tab
-- [ ] Approval gate blocks production deploy and shows "Waiting" state — visible in the Actions tab
-- [ ] Killing a staging pod triggers automatic restart — demonstrable with `kubectl delete pod`
-- [ ] Prometheus alert fires when pod restarts exceed threshold — visible in Grafana
+- [x] Merge to `main` triggers a staging deploy and smoke test — visible in Jenkins (build #2, "Started by an SCM change"; see `docs/evidence/`)
+- [x] Approval gate blocks production deploy until approved — visible in Jenkins (build #2 approval; build #3 shows production skipped after a failed smoke test)
+- [ ] Killing a staging pod triggers automatic restart — demonstrable with `kubectl delete pod -l app=kk-payments -n kijani-staging`
+- [ ] Prometheus alert fires when pod restarts exceed threshold — visible in Grafana (not met: Prometheus not deployed)
 - [ ] New engineer can run the app locally in under 5 minutes following only the README
 
 ## 9. AI Governance & Integrity
